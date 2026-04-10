@@ -197,6 +197,5 @@ progress.md
 # WhatsApp Beacon Project Specific
 data/
 logs/
-analytics/
-qrcode.png
-History_wp.xlsx
+qrcode.pngs
+.xlsx
