@@ -193,3 +193,10 @@ docs/*.md
 task_plan.md
 findings.md
 progress.md
+
+# WhatsApp Beacon Project Specific
+data/
+logs/
+analytics/
+qrcode.png
+History_wp.xlsx

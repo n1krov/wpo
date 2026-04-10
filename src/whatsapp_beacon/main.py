@@ -12,10 +12,16 @@ def main():
     parser.add_argument('-l', '--language', help='Language code (en, es, etc.)')
     parser.add_argument('-e', '--excel', help="Export DB to Excel", action='store_true')
     parser.add_argument('--headless', help="Run in headless mode", action='store_true')
+    parser.add_argument('--debug', help="Enable debug logging and Anti-Idle trace", action='store_true')
+    parser.add_argument('-b', '--browser', choices=['chrome', 'firefox'], help='Browser to use (default: chrome)')
     parser.add_argument('--chrome-driver-path', dest='chrome_driver_path',
                         help="Path to chromedriver binary (default: auto-detect)")
     parser.add_argument('--chrome-binary-path', dest='chrome_binary_path',
                         help="Path to the Chrome/Chromium browser binary (default: auto-detect)")
+    parser.add_argument('--firefox-driver-path', dest='firefox_driver_path',
+                        help="Path to geckodriver binary (default: auto-detect)")
+    parser.add_argument('--firefox-binary-path', dest='firefox_binary_path',
+                        help="Path to the Firefox browser binary (default: auto-detect)")
     parser.add_argument('--analytics', help="Generate the analytics dashboard and exit", action='store_true')
     parser.add_argument('--analytics-output', dest='analytics_output', default='analytics/index.html',
                         help="Output path for the analytics dashboard HTML file")
@@ -26,6 +32,8 @@ def main():
     # Load configuration
     config = Config(config_file=args.config)
     config.update_from_args(args)
+    if config.debug:
+        config.config['log_level'] = 'DEBUG'
 
     # Setup Logging
     setup_logging(log_level=config.log_level)

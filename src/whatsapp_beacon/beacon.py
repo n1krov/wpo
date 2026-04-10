@@ -20,6 +20,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.firefox.service import Service as FirefoxService
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
 from .database import Database
 from .db_to_excel import Converter
@@ -226,62 +228,127 @@ class WhatsAppBeacon:
 
         return None
 
+    def _resolve_geckodriver_path(self):
+        """Resolve the GeckoDriver binary path."""
+        configured = self.config.firefox_driver_path
+        if configured:
+            p = Path(configured)
+            if p.is_file():
+                return str(p)
+            logger.warning(f"Configured firefox_driver_path not found: {configured}")
+
+        system_driver = shutil.which("geckodriver")
+        if system_driver:
+            return system_driver
+
+        return None
+
+    def _resolve_firefox_binary_path(self):
+        """Resolve the Firefox browser binary path."""
+        configured = self.config.firefox_binary_path
+        if configured:
+            p = Path(configured)
+            if p.is_file():
+                return str(p)
+            logger.warning(f"Configured firefox_binary_path not found: {configured}")
+
+        binary_names = ["firefox"]
+        for binary_name in binary_names:
+            binary_path = shutil.which(binary_name)
+            if binary_path:
+                return binary_path
+
+        common_paths = [
+            "/usr/bin/firefox",
+            "/snap/bin/firefox",
+            "/Applications/Firefox.app/Contents/MacOS/firefox",
+        ]
+        for candidate in common_paths:
+            if Path(candidate).is_file():
+                return candidate
+
+        return None
+
     def setup_driver(self):
         """Sets up the Selenium driver."""
-        logger.info("Setting up WebDriver...")
-        options = webdriver.ChromeOptions()
+        logger.info(f"Setting up WebDriver for {self.config.browser}...")
+        
+        if self.config.browser == "firefox":
+            options = FirefoxOptions()
+            user_data_dir = Path(self.config.data_dir) / "firefox_profile"
+            user_data_dir.mkdir(parents=True, exist_ok=True)
+            options.add_argument("-profile")
+            options.add_argument(str(user_data_dir.absolute()))
 
-        # Cross-platform user data directory
-        user_data_dir = Path(self.config.data_dir) / "chrome_profile"
-        options.add_argument(f"user-data-dir={user_data_dir.absolute()}")
+            if self.config.headless:
+                logger.info("Running in Headless mode.")
+                options.add_argument("--headless")
+                options.add_argument("--window-size=1920,1080")
 
-        if self.config.headless:
-            logger.info("Running in Headless mode.")
-            options.add_argument("--headless=new")
-            options.add_argument("--window-size=1920,1080")
-            options.add_argument(
-                "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-            )
+            browser_binary = self._resolve_firefox_binary_path()
+            if browser_binary:
+                logger.info(f"Using Firefox binary at: {browser_binary}")
+                options.binary_location = browser_binary
 
-        # Stability flags (important on Linux/Docker and some Windows configs)
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
+            try:
+                driver_path = self._resolve_geckodriver_path()
+                if driver_path:
+                    logger.info(f"Using GeckoDriver at: {driver_path}")
+                    service = FirefoxService(driver_path)
+                else:
+                    service = FirefoxService()
+                self.driver = webdriver.Firefox(service=service, options=options)
+            except Exception as e:
+                logger.critical(f"Failed to initialize Firefox Driver: {e}")
+                sys.exit(1)
+        else:
+            options = webdriver.ChromeOptions()
+            user_data_dir = Path(self.config.data_dir) / "chrome_profile"
+            options.add_argument(f"user-data-dir={user_data_dir.absolute()}")
 
-        browser_binary = self._resolve_chrome_binary_path()
-        if browser_binary:
-            logger.info(f"Using Chrome binary at: {browser_binary}")
-            options.binary_location = browser_binary
-
-        # Remove Selenium fingerprints that WhatsApp (and other sites) detect.
-        # Without these, WhatsApp Web detects automation and closes the connection.
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
-        options.add_experimental_option("useAutomationExtension", False)
-
-        try:
-            driver_path = self._resolve_chromedriver_path()
-            if driver_path:
-                logger.info(f"Using ChromeDriver at: {driver_path}")
-                service = ChromeService(driver_path)
-            else:
-                service = ChromeService()
-            self.driver = webdriver.Chrome(service=service, options=options)
-            # Patch navigator.webdriver on every new document so it reads as undefined.
-            self.driver.execute_cdp_cmd(
-                "Page.addScriptToEvaluateOnNewDocument",
-                {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
-            )
-        except Exception as e:
-            if "cannot find chrome binary" in str(e).lower():
-                logger.critical(
-                    "Failed to initialize Chrome Driver: could not find a Chrome/Chromium browser binary. "
-                    "Install Google Chrome or Chromium, or pass --chrome-binary-path /path/to/browser."
+            if self.config.headless:
+                logger.info("Running in Headless mode.")
+                options.add_argument("--headless=new")
+                options.add_argument("--window-size=1920,1080")
+                options.add_argument(
+                    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
                 )
-            else:
-                logger.critical(f"Failed to initialize Chrome Driver: {e}")
-            sys.exit(1)
+
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+
+            browser_binary = self._resolve_chrome_binary_path()
+            if browser_binary:
+                logger.info(f"Using Chrome binary at: {browser_binary}")
+                options.binary_location = browser_binary
+
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_experimental_option("excludeSwitches", ["enable-automation", "enable-logging"])
+            options.add_experimental_option("useAutomationExtension", False)
+
+            try:
+                driver_path = self._resolve_chromedriver_path()
+                if driver_path:
+                    logger.info(f"Using ChromeDriver at: {driver_path}")
+                    service = ChromeService(driver_path)
+                else:
+                    service = ChromeService()
+                self.driver = webdriver.Chrome(service=service, options=options)
+                self.driver.execute_cdp_cmd(
+                    "Page.addScriptToEvaluateOnNewDocument",
+                    {"source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"},
+                )
+            except Exception as e:
+                if "cannot find chrome binary" in str(e).lower():
+                    logger.critical(
+                        "Failed to initialize Chrome Driver: could not find a Chrome/Chromium browser binary. "
+                        "Install Google Chrome or Chromium, or pass --chrome-binary-path /path/to/browser."
+                    )
+                else:
+                    logger.critical(f"Failed to initialize Chrome Driver: {e}")
+                sys.exit(1)
 
     def whatsapp_login(self):
         """Logs into WhatsApp Web. Raises WebDriverException / TimeoutException on failure."""
@@ -359,6 +426,7 @@ class WhatsAppBeacon:
         first_online = 0
         cumulative_session_time = 0
         current_session_id = None
+        last_activity_time = time.time()
 
         try:
             while True:
@@ -384,6 +452,15 @@ class WhatsAppBeacon:
                         )
                         previous_state = 'OFFLINE'
                         current_session_id = None
+
+                if time.time() - last_activity_time > 25:
+                    try:
+                        self.driver.execute_script("document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));")
+                        last_activity_time = time.time()
+                        if getattr(self.config, 'debug', False):
+                            logger.info("[DEBUG] Evento Anti-Idle JS ejecutado")
+                    except WebDriverException:
+                        pass
 
                 time.sleep(1)
 

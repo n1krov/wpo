@@ -21,7 +21,10 @@ class Config:
             'log_level': 'INFO',
             'data_dir': 'data',
             'chrome_driver_path': None,
-            'chrome_binary_path': None
+            'chrome_binary_path': None,
+            'firefox_driver_path': None,
+            'firefox_binary_path': None,
+            'debug': False
         }
 
     def _load_from_file(self, filepath):
@@ -69,6 +72,15 @@ class Config:
 
     @property
     def chrome_binary_path(self): return self.config.get('chrome_binary_path')
+
+    @property
+    def firefox_driver_path(self): return self.config.get('firefox_driver_path')
+
+    @property
+    def firefox_binary_path(self): return self.config.get('firefox_binary_path')
+
+    @property
+    def debug(self): return self.config.get('debug')
 
     @property
     def log_level(self): return self.config.get('log_level')
